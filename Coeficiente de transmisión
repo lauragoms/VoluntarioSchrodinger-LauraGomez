@@ -1,0 +1,341 @@
+# include <stdio.h>
+# include <math.h>
+# include "complex.h"
+# include "gsl_rng.h" //Libreria para generación de números aleatorios
+
+gsl_rng *tau;
+
+int main()
+{
+
+	//Preparamos la generación de números aleatorios:
+
+
+   	 extern gsl_rng *tau; //Puntero al estado del número aleatorio
+   	int semilla=481846; //Semilla del generador de números aleatorios
+    
+
+   	tau=gsl_rng_alloc(gsl_rng_taus); //Inicializamos el puntero
+   	gsl_rng_set(tau,semilla); //Inicializamos la semilla
+	double x,promediox;
+	int i,j,p,n,N,ITER,EXP;
+
+
+	int m=1000;
+	int mT=0;
+        int nD=70;
+   	int nciclos=50;
+	N=500;
+	double lambda=0.8;
+
+
+
+
+	FILE *f1,*f2,*f3;
+	f1=fopen("PromedioX.txt","w");
+	f2=fopen("Norma.txt","w");
+    	f3=fopen("Pot.txt","w");
+	//Definimos los array que necesitamos:
+	fcomplex phi [N+1];
+	fcomplex X [N+1];
+	fcomplex alpha [N];
+	fcomplex beta [N];
+	fcomplex A0 [N+1];
+	fcomplex b [N+1];
+	double V [N+1];
+	fcomplex gamma[N];
+	//Definimos la densidad de probabilidad final phi²:
+	double modphif [N];
+        double normaf =0;
+        //Definimos Amenos, Amas, los pasos y la constante s tilde:
+        double s=0.1;
+	double h=0.1;
+	
+
+	//Tenemos que definir en primer lugar la funcion de onda inicial y la expresión del potencial:
+
+    	double expreal; //exponencial real, que sera el modulo de la exponencial imaginaria
+   	fcomplex expimag; //exponencial imaginaria
+    	double argimag; //argumento de la exponencial imaginaria
+    	double pi=3.14159265359;
+    	double k0=2*pi/N;
+   	double k0tilde=k0*nciclos;
+        double norma0;
+        double modphi0[N];
+        double stilde=s/(h*h); //ayuda a calcular b
+        double Amas=1;
+        double Amenos=-1;
+        double imagA0=2/stilde; //ayuda a calcular A0
+    	
+
+   ////////////////////Definimos el bucle temporal, un bucle de m experimentos.
+	
+for (EXP=0; EXP<=m; EXP++)
+    {  promediox=0;
+//Generamos la función de onda inicial:
+
+
+        for (j=0; j<(N+1); j++)
+	    {
+    	     expreal=exp(-8*pow((4*(j)-N),2)/(N*N));
+   	     argimag=k0tilde*(j);
+
+   	     phi[j]=Cgauss(argimag,expreal); //definimos la exponencial imaginaria
+
+    	//Definimos el potencial:
+
+            V[j]=0;
+
+    	    if (j>=(2*N/5) && j<=(3*N/5))
+   	        {  
+        	    V[j]=lambda*k0tilde*k0tilde;
+			
+    	        }
+	//Definimos el array A0 que no dependerá del tiempo:
+	    double realA0=-2-V[j];
+	    A0[j]=Complex(realA0,imagA0);
+	    //printf("%lf %lf \n",A0[j].r,A0[j].i);
+        //Calculamos la densidad de probabilidad inicial y su norma:
+            modphi0[j]=Cabs(phi[j])*Cabs(phi[j]);
+            norma0=norma0+modphi0[j];
+	    fprintf(f3,"%i\t%lf\n",j,V[j]);
+	    //printf("%lf\n",V[j]);
+  	}
+
+
+	//normalizmamos la funcion de onda:
+	for (j=0; j<(N+1); j++)
+	  {
+		phi[j]=RCmul((1./sqrt(norma0)),phi[j]);
+		}
+
+    //Condiciones de contorno para la funcion de onda, beta y alpha:
+    	phi[0]=Complex(0,0);
+     	phi[N]=Complex(0,0);
+    	alpha[N-1]=Complex(0,0);
+    	beta[N-1]=Complex(0,0);
+        X[0]=Complex(0,0);
+	
+     //Definimos el vector alpha:
+	for(i=(N-1);i>=1;i--) 
+    	{
+
+	    fcomplex dividendoalpha;
+        dividendoalpha=Cadd(A0[i],alpha[i]);
+	    alpha[i-1]=Cdiv(Complex(-1.0,0),dividendoalpha);
+	   
+
+	    }
+
+    
+   //Definimos el vector gamma:
+	for (i=0; i<=N; i++)
+	    {
+
+  	    fcomplex dividendo;
+	    dividendo= Cadd(A0[i],RCmul(1.0,alpha[i]));
+	    gamma[i]=Cdiv(Complex(1.0,0),dividendo);
+		
+        }
+/// Fin de la funcion de onda inicial
+
+
+
+
+// Iniciamos un bucle infinito que se parará cuando mT sea +1:
+
+for (;;)
+{
+//Evolucionamos la funcion de onda nD pasos:
+  	 for (n=1; n<=nD; n++)
+   	{ 
+	
+	//Reinicializamos el valor de la norma y ponemos la condicion de contorno para beta:
+	normaf=0;
+
+	 for (i=0; i<=N; i++)
+	    {
+	    //Definimos b:
+	        double realb=4.0/stilde;
+            fcomplex imagb;
+            imagb=Complex(0,1.0);
+            fcomplex imagbrealb;
+            imagbrealb=RCmul(realb,imagb);
+	    b[i]=Cmul(imagbrealb,phi[i]);
+           
+ 	    }
+
+            
+        for(i=(N-1);i>=1;i--) 
+    	{
+     	    //Definimos beta:
+            fcomplex parentesis;
+            parentesis=Csub(b[i],beta[i]);
+	    beta[i-1]=Cmul(gamma[i],parentesis);
+	        
+    	}
+
+	   for (j=0; j<N; j++)
+	    {
+	    
+    	//Calculamos el vector X para el vector entrante de phi:
+        
+    		fcomplex term1;
+    		term1= Cmul(alpha[j],X[j]);
+
+    		X[j+1]=Cadd(term1,beta[j]);
+
+        
+		 
+        }
+        //printf("\n \n");
+    	//Calculamos finalmente la nueva funcion de onda para este instante
+        for (j=0; j<N; j++)
+	    {
+            
+	    	phi[j]=Csub(X[j],phi[j]);
+        
+		
+	    }
+	}// Fin de la evolucion nD pasos
+	normaf=0;
+
+
+
+
+
+
+
+//Pasamos ahora a calcular PD y PI.
+ //Constantes del detector
+	//número de experimentos:
+
+	//numero de evoluciones:
+
+    	double kd=0;
+    	double ki=0;
+    	double Pi=0;
+    	double Pd=0;
+
+	//Calculamos la probabilidad PD:
+            for (p=(4*N/5); p<(N+1); p++)
+			
+			
+            
+	            {
+            		Pd=Pd+Cabs(phi[p])*Cabs(phi[p]);
+		           
+	            }
+	   // printf("%lf \n",Pd);
+            x=gsl_rng_uniform(tau);
+
+            //En el caso en el que se detecte, se rompe el bucle en el que estamos (en este caso es el infinito y volvemos a generar la funcion de onda inicial.
+            if (x<Pd)
+                {   
+                    mT=mT+1;
+                    break;
+                }
+           if (x>=Pd)
+                { 
+             for (p=(4*N/5); p<(N+1); p++)
+            
+	            {
+            		phi[p]=Complex(0.0,0.0);
+		 
+	            }
+            //Calculamos k:
+	         for (j=0; j<(N+1); j++)
+	             {
+                    kd=kd+Cabs(phi[j])*Cabs(phi[j]);
+                   
+                     }      
+                
+            //Normalizamos:
+	         for (j=0; j<(N+1); j++)
+	             {
+                    phi[j]=RCmul((1.0/sqrt(kd)),phi[j]);
+                     }
+   
+                 }   
+
+
+
+
+    //Calculamos la probabilidad Pi:
+            for (p=0; p<(N/5); p++)
+            
+	            {
+            		Pi=Pi+Cabs(phi[p])*Cabs(phi[p]);
+		 	//printf("IZQUIERDA %lf y %i \n",Pi,p);
+	            }
+
+    //Comparamos si es más pequeño que x;
+            x=gsl_rng_uniform(tau);
+            if (x<Pi)
+                {   
+//En el caso en el que se detecte, se rompe el bucle en el que estamos (en este caso es el infinito y volvemos a generar la funcion de onda inicial.
+		break;
+                }
+            if (x>Pi)
+            {
+            for (p=0; p<(N/5); p++)
+            
+	            {
+            		phi[p]=Complex(0.0,0.0);
+		 
+	            }
+            //Calculamos ki:
+	         for (j=0; j<(N+1); j++)
+	             {
+                    ki=ki+Cabs(phi[j])*Cabs(phi[j]);
+                     }
+            //Normalizamos:
+	         for (j=0; j<(N+1); j++)
+	             {
+                    phi[j]=RCmul((1.0/sqrt(ki)),phi[j]);
+                     }
+            }//fin del if
+    
+    }//fin del bucle infinito
+	promediox=0;
+	for (p=0; p<(N+1); p++)
+
+	    {
+
+
+	    promediox=promediox+Cabs(phi[p])*p*Cabs(phi[p]);
+	    
+	    
+	    }
+	fprintf(f1,"%i\t%0.13lf\n",EXP,promediox);
+
+} // fin bucle m experimentos
+
+//Coeficiente de transmisión:
+double K=mT*1.0/m*1.0;
+printf(" El número de veces que se ha detectado en %i experimentos es %i , por lo tanto el coeficiente de transmisión K tiene un valor de %0.20lf con N=%i \n \n \n \n \n \n",m,mT,K,N);
+
+
+	   
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
